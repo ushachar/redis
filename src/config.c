@@ -30,6 +30,7 @@
 
 #include "server.h"
 #include "cluster.h"
+#include "redis_err.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -550,7 +551,7 @@ void loadServerConfig(char *filename, char *options) {
         } else {
             if ((fp = fopen(filename,"r")) == NULL) {
                 serverLog(LL_WARNING,
-                    "Fatal error, can't open config file '%s'", filename);
+                    "Fatal error, can't open config file '%s', %s", filename, redisError(errno));
                 exit(1);
             }
         }

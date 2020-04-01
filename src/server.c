@@ -33,6 +33,7 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
+#include "redis_err.h"
 
 #include <time.h>
 #include <signal.h>
@@ -1767,7 +1768,7 @@ void checkChildrenDone(void) {
         if (pid == -1) {
             serverLog(LL_WARNING,"wait3() returned an error: %s. "
                 "rdb_child_pid = %d, aof_child_pid = %d, module_child_pid = %d",
-                strerror(errno),
+                redisError(errno),
                 (int) server.rdb_child_pid,
                 (int) server.aof_child_pid,
                 (int) server.module_child_pid);
@@ -2843,7 +2844,7 @@ void initServer(void) {
                                O_WRONLY|O_APPEND|O_CREAT,0644);
         if (server.aof_fd == -1) {
             serverLog(LL_WARNING, "Can't open the append-only file: %s",
-                strerror(errno));
+                redisError(errno));
             exit(1);
         }
     }
@@ -4773,7 +4774,7 @@ void loadDataFromDisk(void) {
                 selectDb(server.cached_master,rsi.repl_stream_db);
             }
         } else if (errno != ENOENT) {
-            serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",strerror(errno));
+            serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",redisError(errno));
             exit(1);
         }
     }
@@ -4902,6 +4903,7 @@ int main(int argc, char **argv) {
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
+    initErrorStrings();
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
 
@@ -5073,6 +5075,7 @@ int main(int argc, char **argv) {
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
+    freeErrorStrings();
     return 0;
 }
 
