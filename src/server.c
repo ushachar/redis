@@ -1058,6 +1058,38 @@ void serverLogRaw(int level, const char *msg) {
     if (server.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
 }
 
+void serverLogSysError(int level, int error_code, const char *fmt, ...) {
+    va_list ap;
+    unsigned int offset = 0;
+    char msg[LOG_MAX_LEN];
+
+    if ((level&0xff) < server.verbosity) return;
+
+    va_start(ap, fmt);
+    offset = vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+
+    if (offset < (sizeof(msg) + sizeof(" ( )"))) {
+        char buf[LOG_MAX_LEN - offset];
+        char *error_msg;
+#if (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600) && (!defined(_GNU_SOURCE) || defined(__ANDROID__))
+        /* XSI-compliant version of strerror_r() */
+        if (strerror_r(error_code, buf, sizeof(buf))) {
+            snprintf(buf, sizeof(buf), "Unknown error code %d", error_code);
+        }
+        error_msg = buf;
+#else
+        /* GNU-specific version of strerror_r() */
+        error_msg = strerror_r(error_code, buf, sizeof(buf));
+#endif
+        serverLog(level, "%s (%s)", msg, error_msg);
+    }
+    else {
+        serverLogRaw(level,msg);
+        serverLogRaw(level,"Could not format system error message due to insufficient space");
+    }
+}
+
 /* Like serverLogRaw() but with printf-alike support. This is the function that
  * is used across the code. The raw version is only used in order to dump
  * the INFO output on crash. */
@@ -1765,9 +1797,8 @@ void checkChildrenDone(void) {
         }
 
         if (pid == -1) {
-            serverLog(LL_WARNING,"wait3() returned an error: %s. "
+            serverLogSysError(LL_WARNING, errno, "wait3() returned an error: "
                 "rdb_child_pid = %d, aof_child_pid = %d, module_child_pid = %d",
-                strerror(errno),
                 (int) server.rdb_child_pid,
                 (int) server.aof_child_pid,
                 (int) server.module_child_pid);
@@ -2458,8 +2489,7 @@ void adjustOpenFilesLimit(void) {
     struct rlimit limit;
 
     if (getrlimit(RLIMIT_NOFILE,&limit) == -1) {
-        serverLog(LL_WARNING,"Unable to obtain the current NOFILE limit (%s), assuming 1024 and setting the max clients configuration accordingly.",
-            strerror(errno));
+        serverLogSysError(LL_WARNING, errno, "Unable to obtain the current NOFILE limit, assuming 1024 and setting the max clients configuration accordingly.");
         server.maxclients = 1024-CONFIG_MIN_RESERVED_FDS;
     } else {
         rlim_t oldlimit = limit.rlim_cur;
@@ -2510,9 +2540,9 @@ void adjustOpenFilesLimit(void) {
                     "requiring at least %llu max file descriptors.",
                     old_maxclients,
                     (unsigned long long) maxfiles);
-                serverLog(LL_WARNING,"Server can't set maximum open files "
-                    "to %llu because of OS error: %s.",
-                    (unsigned long long) maxfiles, strerror(setrlimit_error));
+                serverLogSysError(LL_WARNING, setrlimit_error, "Server can't set maximum open files "
+                    "to %llu because of OS error",
+                    (unsigned long long) maxfiles);
                 serverLog(LL_WARNING,"Current maximum open files is %llu. "
                     "maxclients has been reduced to %d to compensate for "
                     "low ulimit. "
@@ -2842,8 +2872,7 @@ void initServer(void) {
         server.aof_fd = open(server.aof_filename,
                                O_WRONLY|O_APPEND|O_CREAT,0644);
         if (server.aof_fd == -1) {
-            serverLog(LL_WARNING, "Can't open the append-only file: %s",
-                strerror(errno));
+            serverLogSysError(LL_WARNING, errno, "Can't open the append-only file (%s)", server.aof_filename);
             exit(1);
         }
     }

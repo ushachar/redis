@@ -47,6 +47,9 @@
  * On NetBSD, _XOPEN_SOURCE undefines _NETBSD_SOURCE and
  * thus hides inet_aton etc.
  */
+#elif defined(__APPLE__)
+#define _DARWIN_C_SOURCE 1
+#define _XOPEN_SOURCE 600L
 #elif !defined(__NetBSD__)
 #define _XOPEN_SOURCE
 #endif
