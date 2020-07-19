@@ -14,6 +14,13 @@ proc create_aof {code} {
     close $fp
 }
 
+proc start_invalid_server_aof {overrides code} {
+    upvar defaults defaults srv srv server_path server_path
+    set config [concat $defaults $overrides]
+    set srv [start_server [concat "expectfail {1}" [list overrides $config]]]
+    uplevel 1 $code
+}
+
 proc start_server_aof {overrides code} {
     upvar defaults defaults srv srv server_path server_path
     set config [concat $defaults $overrides]
@@ -23,6 +30,7 @@ proc start_server_aof {overrides code} {
 }
 
 tags {"aof"} {
+
     ## Server can start when aof-load-truncated is set to yes and AOF
     ## is truncated, with an incomplete MULTI block.
     create_aof {
@@ -30,6 +38,27 @@ tags {"aof"} {
         append_to_aof [formatCommand multi]
         append_to_aof [formatCommand set bar world]
     }
+
+    ## Server can't start when aof file is inaccessible
+    exec chmod 0000 $aof_path
+    start_invalid_server_aof [list dir $server_path ] {
+            test "Bad format: Server should have logged an access error" {
+                set pattern "*Can't open the append-only file (appendonly.aof) (Permission denied)*"
+                set retry 10
+                while {$retry} {
+                    set result [exec tail -1 < [dict get $srv stdout]]
+                    if {[string match $pattern $result]} {
+                        break
+                    }
+                    incr retry -1
+                    after 1000
+                }
+                if {$retry == 0} {
+                    error "assertion:expected error not found on config file"
+                }
+            }
+    }
+    exec chmod 666 $aof_path
 
     start_server_aof [list dir $server_path aof-load-truncated yes] {
         test "Unfinished MULTI: Server should start if load-truncated is yes" {

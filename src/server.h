@@ -1949,8 +1949,11 @@ int prepareForShutdown();
 #ifdef __GNUC__
 void serverLog(int level, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
+void serverLogSysError(int level, int error_code, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
 #else
 void serverLog(int level, const char *fmt, ...);
+void serverLogSysError(int level, int error_code, const char *fmt, ...);
 #endif
 void serverLogRaw(int level, const char *msg);
 void serverLogFromHandler(int level, const char *msg);

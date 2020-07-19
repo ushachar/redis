@@ -179,6 +179,7 @@ proc start_server {options {code undefined}} {
     set baseconfig "default.conf"
     set overrides {}
     set tags {}
+    set expectfail 0
 
     # parse options
     foreach {option value} $options {
@@ -190,6 +191,8 @@ proc start_server {options {code undefined}} {
             "tags" {
                 set tags $value
                 set ::tags [concat $::tags $value] }
+            "expectfail" {
+                set expectfail $value }
             default {
                 error "Unknown option $option" }
         }
@@ -274,11 +277,13 @@ proc start_server {options {code undefined}} {
             regexp {PID:\s(\d+)} [exec cat $stdout] _ _pid
             after $checkperiod
             incr maxiter -1
-            if {$maxiter == 0} {
-                start_server_error $config_file "No PID detected in log $stdout"
-                puts "--- LOG CONTENT ---"
-                puts [exec cat $stdout]
-                puts "-------------------"
+            if {$maxiter == 0 } {
+                if {!$expectfail} {
+                    start_server_error $config_file "No PID detected in log $stdout"
+                    puts "--- LOG CONTENT ---"
+                    puts [exec cat $stdout]
+                    puts "-------------------"
+                }
                 break
             }
 
@@ -315,7 +320,7 @@ proc start_server {options {code undefined}} {
             puts ""
         }
 
-        if {!$serverisup} {
+        if {!$serverisup && !$expectfail} {
             set err {}
             append err [exec cat $stdout] "\n" [exec cat $stderr]
             start_server_error $config_file $err
